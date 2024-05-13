@@ -1,9 +1,9 @@
 *.pyc
 __pycache__/
-scripts/models/deform_conv/build/*
-scripts/models/deform_conv/*.so
 
-ignore
+models/deform_conv/build/*
+models/deform_conv/*.so
+
 save/*
 pretrained/*
 exp/*
