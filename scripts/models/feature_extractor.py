@@ -218,7 +218,8 @@ class FeaturePyramidNetwork(nn.Module):
         used_backbone_levels = len(laterals)
         for i in range(used_backbone_levels - 1, 0, -1):
             laterals[i - 1] += F.interpolate(
-                laterals[i], scale_factor=2, mode='nearest')
+                laterals[i], size=(laterals[i-1].size(2),laterals[i-1].size(3)), mode='nearest')
+                # laterals[i], scale_factor=2, mode='nearest')
 
         # Build outputs
         out = [
