@@ -16,5 +16,5 @@ docker run \
 # Training
 ## Build deformable convolution
 ```bash
-cd /root/code/models/deform_conv/ && bash build.sh
+cd /root/code/scripts/models/deform_conv/ && bash build.sh
 ```
