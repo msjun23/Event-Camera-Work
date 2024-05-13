@@ -39,6 +39,9 @@ def set_random_seed(seed):
     # Numpy
     np.random.seed(seed)
 
+def train(args: argparse):
+    print(f'{args.local_rank}: {torch.cuda.get_device_name()} | {args.device}')
+
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
@@ -103,7 +106,7 @@ if __name__=='__main__':
     
     if args.is_master:
         # Save scripts
-        source_folder = '/root/code'
+        source_folder = '/root/code/scripts'
         if os.path.exists(args.save_dir):
             shutil.rmtree(args.save_dir)
         shutil.copytree(source_folder, args.save_dir+'/scripts')
@@ -116,9 +119,5 @@ if __name__=='__main__':
         cfg.freeze()
         save_cfg_to_txt(cfg, args.save_dir)
     
-    # m = DLManager(args, test_only=False)
-    # m.train()
-    # if args.is_master:
-    #     # m.validation(args.cfg.EPOCHS)
-    #     m.test(args.cfg.EPOCHS)
+    train(args)
     print('# Save dir: ', args.save_dir, '\n')
