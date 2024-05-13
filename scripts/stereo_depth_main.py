@@ -4,6 +4,8 @@ import shutil
 import random
 import argparse
 import numpy as np
+import lightning as pl
+
 from pathlib import Path
 from yacs.config import CfgNode as CN
 from datetime import datetime, timezone, timedelta
@@ -41,7 +43,8 @@ def set_random_seed(seed):
 
 def train(args: argparse):
     print(f'{args.local_rank}: {torch.cuda.get_device_name()} | {args.device}')
-
+    
+    # Prepare dataset
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
