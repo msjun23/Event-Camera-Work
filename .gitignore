@@ -1,0 +1,9 @@
+*.pyc
+__pycache__/
+scripts/models/deform_conv/build/*
+scripts/models/deform_conv/deform_conv_cuda.cpython-39-x86_64-linux-gnu.so
+
+ignore
+save/*
+pretrained/*
+exp/*

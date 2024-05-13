@@ -1,0 +1,66 @@
+EPOCHS: 200
+DATASET:
+  DIR: /root/data/
+  # NAME: [MVSEC, DSEC]
+  NAME: MVSEC
+  PARAMS:
+    # split: ['1', '2', '3']
+    split: '1'
+    # modality: [event, image, EI]
+    modality: EI
+    # representation: [voxel, on_off, raw]
+    representation: raw
+    delta_t_ms: 50
+    # minimal event accumulation time = delta_t_ms / num_bins [ms]
+    num_bins: 25
+    # original size: [260, 346]
+    crop_height: 228
+    crop_width: 312
+    pad_height: 264
+    pad_width: 348
+DATALOADER:
+  TRAIN:
+    PARAMS:
+      batch_size: 32
+      shuffle: True
+      drop_last: False
+  VALIDATION:
+    PARAMS:
+      batch_size: 1
+      shuffle: False
+      drop_last: False
+  TEST:
+    PARAMS:
+      batch_size: 1
+      shuffle: False
+      drop_last: False
+SHOW:
+  TRAIN: False
+  VALIDATION: False
+  TEST: False
+MODEL:
+  NAME: EventStereoMatchingNetwork
+  PARAMS:
+    event_processor:
+      PARAMS:
+        in_channels: 1
+        base_channels: 8
+    disparity_estimator:
+      PARAMS:
+        in_channels: 26
+        max_disp: 37
+        refine_channels: 26
+        num_fusions: 6
+OPTIMIZER:
+  NAME: Adam
+  PARAMS:
+    lr: 0.0005
+    weight_decay: 0.0001
+SCHEDULER:
+  NAME: CosineAnnealingWarmupRestarts
+  PARAMS:
+    cycle_mult: 1.0
+    first_cycle_steps: 100
+    gamma: 1.0
+    lr_ratio: 0.0001
+    warmup_steps: 10
