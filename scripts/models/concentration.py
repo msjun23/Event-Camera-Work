@@ -101,15 +101,25 @@ class ConcentrationNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
+        print(x.shape)
         out = self.conv1(x)
+        print('out', out.shape)
         s1 = self.conv2(out)
+        print('s1', s1.shape)
         s2 = self.down1(s1)
+        print('s2', s2.shape)
         s3 = self.down2(s2)
+        print('s3', s3.shape)
         out = self.down3(s3)
+        print('out', out.shape)
         out = self.up1(out, s3)
+        print('out', out.shape)
         out = self.up2(out, s2)
+        print('out', out.shape)
         out = self.up3(out, s1)
+        print('out', out.shape)
         out = self.last_conv(out)
+        print('out', out.shape)
 
         if self.attention_method == 'hard':
             hard_attention = out.max(dim=1)[1]

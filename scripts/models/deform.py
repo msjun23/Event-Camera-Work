@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 from .deform_conv import DeformConv, ModulatedDeformConv
@@ -69,6 +70,8 @@ class DeformConv2d(nn.Module):
         nn.init.constant_(self.offset_conv.bias, 0.)
 
     def forward(self, x):
+        # Deformable convolution doesn't support bf16 operations
+        bf16_flag = False
         if self.modulation:
             offset_mask = self.offset_conv(x)
 
@@ -81,11 +84,23 @@ class DeformConv2d(nn.Module):
             if self.double_mask:
                 mask = mask * 2  # initialize as 1 to work as regular conv
 
+            if x.dtype == torch.bfloat16:
+                x = x.to(torch.float32)
+                offset = offset.to(torch.float32)
+                mask = mask.to(torch.float32)
+                bf16_flag = True
             out = self.deform_conv(x, offset, mask)
 
         else:
             offset = self.offset_conv(x)
+            if x.dtype == torch.bfloat16:
+                x = x.to(torch.float32)
+                offset = offset.to(torch.float32)
+                bf16_flag = True
             out = self.deform_conv(x, offset)
+        
+        if bf16_flag:
+            out.to(torch.bfloat16)
 
         return out
 

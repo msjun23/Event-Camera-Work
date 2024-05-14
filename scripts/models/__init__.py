@@ -1,1 +1,2 @@
 from .event_stereo_matching import EventStereoMatchingNetwork
+from .stereo_depth_model import StereoDepthLightningModule
