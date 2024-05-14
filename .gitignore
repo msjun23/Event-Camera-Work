@@ -7,3 +7,5 @@ scripts/models/deform_conv/*.so
 save/*
 pretrained/*
 exp/*
+
+lightning_logs/
