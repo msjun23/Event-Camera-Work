@@ -52,15 +52,9 @@ def train(args: argparse, cfg: CN):
     
     # Prepare dataset
     dataset_provider = getattr(dataset, cfg.dataset.name).dataset_provider.DatasetProvider(data_dir=args.data_dir, **cfg.dataset.params)
-    train_dataset = dataset_provider.get_train_dataset()
-    valid_dataset = dataset_provider.get_valid_dataset()
-    test_dataset  = dataset_provider.get_test_dataset()
-    train_loader = DataLoader(dataset=train_dataset, **cfg.dataloader.train.params)
-    valid_loader = DataLoader(dataset=valid_dataset, **cfg.dataloader.validation.params)
-    test_loader  = DataLoader(dataset=test_dataset, **cfg.dataloader.test.params)
     
     # Prepare model
-    stereo_depth_model = getattr(models, cfg.model.name)(**cfg.model.params)
+    stereo_depth_model = getattr(models, cfg.model.name)(cfg.model, dataset=dataset_provider)
     
     # Learning rate monitor
     lr_monitor = LearningRateMonitor(logging_interval='step', log_momentum=True, log_weight_decay=True)
@@ -68,9 +62,7 @@ def train(args: argparse, cfg: CN):
     # Prepare trainer
     trainer = pl.Trainer(**cfg.trainer.params, 
                          callbacks=[lr_monitor])
-    trainer.fit(model=stereo_depth_model, 
-                train_dataloaders=train_loader, 
-                val_dataloaders=valid_loader)
+    trainer.fit(model=stereo_depth_model)
     
 if __name__=='__main__':
     parser = argparse.ArgumentParser()

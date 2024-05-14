@@ -34,51 +34,50 @@ dataset:
     crop_width: 336
     pad_height: 272
     pad_width: 352
-dataloader:
-  train:
-    params:
-      batch_size: 64
-      shuffle: True
-      drop_last: False
-      num_workers: 8
-  validation:
-    params:
-      batch_size: 1
-      shuffle: False
-      drop_last: False
-      num_workers: 8
-  test:
-    params:
-      batch_size: 1
-      shuffle: False
-      drop_last: False
-      num_workers: 8
 show:
   train: False
   validation: False
   test: False
 model:
   name: StereoDepthLightningModule
-  params:
-    event_processor:
+  event_processor:
+    params:
+      in_channels: 25
+      base_channels: 8
+  disparity_estimator:
+    params:
+      in_channels: 2
+      max_disp: 120
+      refine_channels: 2
+  optimizer:
+    name: Adam
+    params:
+      lr: 0.0005
+      weight_decay: 0.0001
+  scheduler:
+    name: CosineAnnealingWarmupRestarts
+    params:
+      cycle_mult: 1.0
+      first_cycle_steps: 100
+      gamma: 1.0
+      lr_ratio: 0.0001
+      warmup_steps: 10
+  dataloader:
+    train:
       params:
-        in_channels: 25
-        base_channels: 8
-    disparity_estimator:
+        batch_size: 64
+        shuffle: True
+        drop_last: False
+        num_workers: 8
+    validation:
       params:
-        in_channels: 2
-        max_disp: 120
-        refine_channels: 2
-    optimizer:
-      name: Adam
+        batch_size: 1
+        shuffle: False
+        drop_last: False
+        num_workers: 8
+    test:
       params:
-        lr: 0.0005
-        weight_decay: 0.0001
-    scheduler:
-      name: CosineAnnealingWarmupRestarts
-      params:
-        cycle_mult: 1.0
-        first_cycle_steps: 100
-        gamma: 1.0
-        lr_ratio: 0.0001
-        warmup_steps: 10
+        batch_size: 1
+        shuffle: False
+        drop_last: False
+        num_workers: 8
