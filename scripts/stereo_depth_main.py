@@ -10,10 +10,9 @@ from datetime import datetime, timezone, timedelta
 
 import torch
 import torch.distributed
-from torch.utils.data import DataLoader
-
 import lightning as pl
 from lightning.pytorch.callbacks import LearningRateMonitor
+from pytorch_lightning.loggers import TensorBoardLogger
 
 import models
 import dataset
@@ -59,9 +58,13 @@ def train(args: argparse, cfg: CN):
     # Learning rate monitor
     lr_monitor = LearningRateMonitor(logging_interval='step', log_momentum=True, log_weight_decay=True)
     
+    # Logger
+    logger = TensorBoardLogger(save_dir=args.save_dir+'/logs/')
+    
     # Prepare trainer
     trainer = pl.Trainer(**cfg.trainer.params, 
-                         callbacks=[lr_monitor])
+                         callbacks=[lr_monitor], 
+                         logger=logger)
     trainer.fit(model=stereo_depth_model)
     trainer.test(model=stereo_depth_model)
     
