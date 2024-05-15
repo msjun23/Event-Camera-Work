@@ -135,7 +135,7 @@ class StereoDepthLightningModule(pl.LightningModule):
         # Validation log dict
         self.log_dict(
             {'val/loss': loss, 'val/fps': fps, 'val/mde': val_mde, 'val/mdise': val_mdise, 'val/1pa': val_1pa}, 
-            on_step=True, 
+            on_step=False, 
             on_epoch=True, 
             prog_bar=True, 
             logger=True, 
