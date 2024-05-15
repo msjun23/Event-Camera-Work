@@ -6,7 +6,7 @@ trainer:
     max_epochs: 200
     accelerator: gpu
     strategy: auto
-    precision: bf16   # 32-true (32) for default, bf16 for mixed precision
+    precision: bf16-mixed   # 32-true (32) for default, bf16-mixed for mixed precision
     accumulate_grad_batches: 1 # Gradient accumulation every n batches
     gradient_clip_val: null
     log_every_n_steps: 10
