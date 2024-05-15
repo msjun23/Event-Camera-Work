@@ -63,6 +63,7 @@ def train(args: argparse, cfg: CN):
     trainer = pl.Trainer(**cfg.trainer.params, 
                          callbacks=[lr_monitor])
     trainer.fit(model=stereo_depth_model)
+    trainer.test(model=stereo_depth_model)
     
 if __name__=='__main__':
     parser = argparse.ArgumentParser()

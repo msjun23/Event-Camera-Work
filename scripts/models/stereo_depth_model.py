@@ -108,7 +108,7 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         # Forward pass
         start_t = time.time()
-        pred_disparity_pyramid = self.forward(stereo_event, stereo_image)
+        pred_disparity_pyramid = self.forward(stereo_event, stereo_image)   # List: [[N, H, W], ...]
         fps = 1 / ((time.time() - start_t) / batch_size)
         
         # Calculate loss
@@ -130,7 +130,7 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         # Validation log dict
         self.log_dict(
-            {'val/loss': loss, 'fps': fps, 'val/mde': val_mde, 'val/mdise': val_mdise, 'val/1pa': val_1pa}, 
+            {'val/loss': loss, 'val/fps': fps, 'val/mde': val_mde, 'val/mdise': val_mdise, 'val/1pa': val_1pa}, 
             on_step=True, 
             on_epoch=True, 
             prog_bar=True, 
@@ -141,6 +141,50 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         return loss
     
+    def test_step(self, batch, batch_idx):
+        stereo_event = batch['event'] if 'event' in batch else None     # ['left', 'right'], [N, C, H, W]
+        stereo_image = batch['image'] if 'image' in batch else None     # ['left', 'right'], [N, C, H, W]
+        disparity_gt = batch['disparity_gt'] if 'disparity_gt' in batch else None   # [N, H, W]
+        file_index = batch['file_index'] if 'file_index' in batch else None
+        # seq_name = batch['seq_name'] if 'seq_name' in batch else None
+        batch_size = len(file_index)
+        
+        # Forward pass
+        start_t = time.time()
+        pred_disparity_pyramid = self.forward(stereo_event, stereo_image)   # List: [[N, H, W], ...]
+        fps = 1 / ((time.time() - start_t) / batch_size)
+        
+        if disparity_gt is not None:
+            # Calculate loss
+            loss_disp = None
+            loss_disp = self._cal_loss(pred_disparity_pyramid, disparity_gt)
+            loss = loss_disp.mean()
+            
+            # Calculate metrics
+            pred = pred_disparity_pyramid[-1].detach()
+            gt   = disparity_gt.detach()
+            mask = (gt > 0) & (gt < self.max_disp)
+            test_mde = test_mdise = test_1pa = 0.
+            for p, g, m in zip(pred, gt, mask):
+                p, g = p[m], g[m]
+                test_mde += mean_depth_error(p, g).item()
+                test_mdise += mean_disparity_error(p, g).item()
+                test_1pa += n_pixel_accuracy(p, g, 1).item()
+            test_mde, test_mdise, test_1pa = test_mde/batch_size, test_mdise/batch_size, test_1pa/batch_size
+            
+            # Test log dict
+            self.log_dict(
+                {'test/loss': loss, 'test/fps': fps, 'test/mde': test_mde, 'test/mdise': test_mdise, 'test/1pa': test_1pa}, 
+                on_step=False, 
+                on_epoch=True, 
+                prog_bar=True, 
+                logger=True, 
+                batch_size=batch_size, 
+                sync_dist=True, 
+            )
+            
+            return loss
+        
     def configure_optimizers(self):
         params_group = self._get_params_group(self.optimizer.params.lr)
         optimizer = getattr(torch.optim, self.optimizer.name)(params_group, **self.optimizer.params)
