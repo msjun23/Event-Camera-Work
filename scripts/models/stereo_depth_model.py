@@ -28,11 +28,6 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         self.dataset = dataset
         
-        # # Train, validation and test step outputs buffer
-        # self.training_step_outputs = []
-        # self.validation_step_outputs = []
-        # self.test_step_outputs = []
-        
     def forward(self, stereo_event, stereo_image):
         rose_img = {}
         ei_frame = {}
@@ -72,60 +67,36 @@ class StereoDepthLightningModule(pl.LightningModule):
         batch_size = len(file_index)
         
         # Forward pass
-        start_t = time.time()
         pred_disparity_pyramid = self.forward(stereo_event, stereo_image)   # List: [[N, H, W], ...]
-        fps = 1 / ((time.time() - start_t) / pred_disparity_pyramid[-1].shape[0])
-        self.log('fps', fps, prog_bar=True, on_step=True)           # FPS
         
         # Calculate loss
         loss_disp = self._cal_loss(pred_disparity_pyramid, disparity_gt)
         loss = loss_disp.mean()
-        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=batch_size, sync_dist=True)
         
         # Calculate metrics
         pred = pred_disparity_pyramid[-1].detach()
         gt   = disparity_gt.detach()
         mask = (gt > 0) & (gt < self.max_disp)
-        
-            # MVSEC
-        step_mde = step_mdise = step_1pa = 0.
+        train_mde = train_mdise = train_1pa = 0.
         for p, g, m in zip(pred, gt, mask):
             p, g = p[m], g[m]
-            step_mde += mean_depth_error(p, g)
-            step_mdise += mean_disparity_error(p, g)
-            step_1pa += n_pixel_accuracy(p, g, 1)
-        step_mde, step_mdise, step_1pa = step_mde/batch_size, step_mdise/batch_size, step_1pa/batch_size
-        self.log('train_mde', step_mde, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=batch_size, sync_dist=True)
-        self.log('train_mdise', step_mdise, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=batch_size, sync_dist=True)
-        self.log('train_1pa', step_1pa, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=batch_size, sync_dist=True)
+            train_mde += mean_depth_error(p, g).item()
+            train_mdise += mean_disparity_error(p, g).item()
+            train_1pa += n_pixel_accuracy(p, g, 1).item()
+        train_mde, train_mdise, train_1pa = train_mde/batch_size, train_mdise/batch_size, train_1pa/batch_size
         
-        # Training step outputs
-        # output_dict = {'MDE': step_mde, 'MDisE': step_mdise, '1PA': step_1pa, 'num_imgs': num_imgs}
-        # self.training_step_outputs.append(output_dict)
+        # Train log dict
+        self.log_dict(
+            {'train/loss': loss, 'train/mde': train_mde, 'train/mdise': train_mdise, 'train/1pa': train_1pa}, 
+            on_step=True, 
+            on_epoch=True, 
+            prog_bar=True, 
+            logger=True, 
+            batch_size=batch_size, 
+            sync_dist=True, 
+        )
+        
         return loss
-    
-    # def on_train_epoch_end(self):
-    #     # Gather all batch metrics
-    #     num_imgs = 0
-    #     epoch_mde = epoch_mdise = epoch_1pa = 0.
-    #     for batch_output in self.training_step_outputs:     # for dict in list
-    #         num_imgs += batch_output['num_imgs']
-    #         epoch_mde += batch_output['MDE']
-    #         epoch_mdise += batch_output['MDisE']
-    #         epoch_1pa += batch_output['1PA']
-        
-    #     # Metrics on an epoch
-    #     epoch_mde /= num_imgs
-    #     epoch_mdise /= num_imgs
-    #     epoch_1pa /= num_imgs
-        
-    #     # Log epoch metrics
-    #     self.log('MDE', epoch_mde, prog_bar=True, on_epoch=True, sync_dist=True)
-    #     self.log('MDisE', epoch_mdise, prog_bar=True, on_epoch=True, sync_dist=True)
-    #     self.log('1PA', epoch_1pa, prog_bar=True, on_epoch=True, sync_dist=True)
-        
-    #     # Free up the memory
-    #     self.training_step_outputs.clear()
     
     def validation_step(self, batch, batch_idx):
         stereo_event = batch['event'] if 'event' in batch else None     # ['left', 'right'], [N, C, H, W]
@@ -136,14 +107,38 @@ class StereoDepthLightningModule(pl.LightningModule):
         batch_size = len(file_index)
         
         # Forward pass
+        start_t = time.time()
         pred_disparity_pyramid = self.forward(stereo_event, stereo_image)
+        fps = 1 / ((time.time() - start_t) / batch_size)
         
         # Calculate loss
         loss_disp = None
-        if disparity_gt is not None:
-            loss_disp = self._cal_loss(pred_disparity_pyramid, disparity_gt)
-            loss = loss_disp.mean()
-            self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=batch_size, sync_dist=True)
+        loss_disp = self._cal_loss(pred_disparity_pyramid, disparity_gt)
+        loss = loss_disp.mean()
+        
+        # Calculate metrics
+        pred = pred_disparity_pyramid[-1].detach()
+        gt   = disparity_gt.detach()
+        mask = (gt > 0) & (gt < self.max_disp)
+        val_mde = val_mdise = val_1pa = 0.
+        for p, g, m in zip(pred, gt, mask):
+            p, g = p[m], g[m]
+            val_mde += mean_depth_error(p, g).item()
+            val_mdise += mean_disparity_error(p, g).item()
+            val_1pa += n_pixel_accuracy(p, g, 1).item()
+        val_mde, val_mdise, val_1pa = val_mde/batch_size, val_mdise/batch_size, val_1pa/batch_size
+        
+        # Validation log dict
+        self.log_dict(
+            {'val/loss': loss, 'fps': fps, 'val/mde': val_mde, 'val/mdise': val_mdise, 'val/1pa': val_1pa}, 
+            on_step=True, 
+            on_epoch=True, 
+            prog_bar=True, 
+            logger=True, 
+            batch_size=batch_size, 
+            sync_dist=True, 
+        )
+        
         return loss
     
     def configure_optimizers(self):
