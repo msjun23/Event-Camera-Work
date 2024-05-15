@@ -13,6 +13,10 @@ from .rose import RoSE
 from .stereo_matching import StereoMatchingNetwork
 from utils.metrics import *
 
+import warnings
+# Ignore pytorch lightning sync_dist warning
+warnings.filterwarnings('ignore', '.*It is recommended to use.*', category=UserWarning)
+
 
 class StereoDepthLightningModule(pl.LightningModule):
     def __init__(self, config, dataset=None):
