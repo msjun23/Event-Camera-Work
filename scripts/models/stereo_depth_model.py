@@ -16,6 +16,7 @@ from pytorch_lightning.utilities import rank_zero_only, rank_zero_info
 from .rose import RoSE
 from .stereo_matching import StereoMatchingNetwork
 from utils.metrics import *
+from utils import metrics
 
 import warnings
 # Ignore pytorch lightning sync_dist warning
@@ -38,6 +39,8 @@ class StereoDepthLightningModule(pl.LightningModule):
         self.dataset = dataset
         
         self.show = config.show
+        
+        self.metrics = config.metric
         
     @rank_zero_only
     def on_train_start(self):
@@ -112,18 +115,17 @@ class StereoDepthLightningModule(pl.LightningModule):
         pred = pred_disparity_pyramid[-1].detach()
         gt   = disparity_gt.detach()
         mask = (gt > 0) & (gt < self.max_disp)
-        train_mde = train_mdise = train_1pa = 0.
+        metrics_dict = {getattr(self.metrics, metric).name:0. for metric in self.metrics}
         for p, g, m in zip(pred, gt, mask):
             p, g = p[m], g[m]
-            train_mde += mean_depth_error(p, g).item()
-            train_mdise += mean_disparity_error(p, g).item()
-            train_1pa += n_pixel_accuracy(p, g, 1).item()
-        train_mde, train_mdise, train_1pa = train_mde/batch_size, train_mdise/batch_size, train_1pa/batch_size
+            for _m, detail in self.metrics.items():
+                metrics_dict[detail.name] += getattr(metrics, _m)(p, g).item() if 'params' not in detail else getattr(metrics, _m)(p, g, **detail.params).item()
+        metrics_dict = {k: v/batch_size for k, v in metrics_dict.items()}
         
         # Train log dict
         self.log('train/loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True, sync_dist=True, batch_size=batch_size)
         self.log_dict(
-            {'train/mde': train_mde, 'train/mdise': train_mdise, 'train/1pa': train_1pa}, 
+            {'train/'+k: v for k, v in metrics_dict.items()}, 
             prog_bar=False, 
             logger=True, 
             on_step=True, 
@@ -200,18 +202,17 @@ class StereoDepthLightningModule(pl.LightningModule):
         pred = pred_disparity_pyramid[-1].detach()
         gt   = disparity_gt.detach()
         mask = (gt > 0) & (gt < self.max_disp)
-        val_mde = val_mdise = val_1pa = 0.
+        metrics_dict = {getattr(self.metrics, metric).name:0. for metric in self.metrics}
         for p, g, m in zip(pred, gt, mask):
             p, g = p[m], g[m]
-            val_mde += mean_depth_error(p, g).item()
-            val_mdise += mean_disparity_error(p, g).item()
-            val_1pa += n_pixel_accuracy(p, g, 1).item()
-        val_mde, val_mdise, val_1pa = val_mde/batch_size, val_mdise/batch_size, val_1pa/batch_size
+            for _m, detail in self.metrics.items():
+                metrics_dict[detail.name] += getattr(metrics, _m)(p, g).item() if 'params' not in detail else getattr(metrics, _m)(p, g, **detail.params).item()
+        metrics_dict = {k: v/batch_size for k, v in metrics_dict.items()}
         
         # Validation log dict
         self.log('val/loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True, sync_dist=True, batch_size=batch_size)
         self.log_dict(
-            {'val/mde': val_mde, 'val/mdise': val_mdise, 'val/1pa': val_1pa, 'val/fps': fps}, 
+            {'val/'+k: v for k, v in metrics_dict.items()} | {'val/fps': fps}, 
             prog_bar=False, 
             logger=True, 
             on_step=True, 
@@ -287,18 +288,17 @@ class StereoDepthLightningModule(pl.LightningModule):
             pred = pred_disparity_pyramid[-1].detach()
             gt   = disparity_gt.detach()
             mask = (gt > 0) & (gt < self.max_disp)
-            test_mde = test_mdise = test_1pa = 0.
+            metrics_dict = {getattr(self.metrics, metric).name:0. for metric in self.metrics}
             for p, g, m in zip(pred, gt, mask):
                 p, g = p[m], g[m]
-                test_mde += mean_depth_error(p, g).item()
-                test_mdise += mean_disparity_error(p, g).item()
-                test_1pa += n_pixel_accuracy(p, g, 1).item()
-            test_mde, test_mdise, test_1pa = test_mde/batch_size, test_mdise/batch_size, test_1pa/batch_size
+                for _m, detail in self.metrics.items():
+                    metrics_dict[detail.name] += getattr(metrics, _m)(p, g).item() if 'params' not in detail else getattr(metrics, _m)(p, g, **detail.params).item()
+            metrics_dict = {k: v/batch_size for k, v in metrics_dict.items()}
             
             # Test log dict
             self.log('test/loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True, sync_dist=True, batch_size=batch_size)
             self.log_dict(
-                {'test/mde': test_mde, 'test/mdise': test_mdise, 'test/1pa': test_1pa, 'test/fps': fps}, 
+                {'test/'+k: v for k, v in metrics_dict.items()} | {'test/fps': fps}, 
                 prog_bar=False, 
                 logger=True, 
                 on_step=True, 

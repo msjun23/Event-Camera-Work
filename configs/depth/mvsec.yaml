@@ -37,10 +37,6 @@ dataset:
     crop_width: 336
     pad_height: 272
     pad_width: 352
-show:
-  train: False
-  validation: False
-  test: False
 model:
   name: StereoDepthLightningModule
   event_processor:
@@ -84,3 +80,16 @@ model:
         shuffle: False
         drop_last: False
         num_workers: 8
+  show:
+    train: True
+    validation: True
+    test: True
+  metric:
+    mean_depth_error:
+      name: mde
+    mean_disparity_error:
+      name: mdise
+    n_pixel_accuracy:
+      name: 1pa
+      params:
+        n: 1
