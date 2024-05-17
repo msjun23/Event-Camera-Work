@@ -116,14 +116,15 @@ class StereoDepthLightningModule(pl.LightningModule):
         train_mde, train_mdise, train_1pa = train_mde/batch_size, train_mdise/batch_size, train_1pa/batch_size
         
         # Train log dict
+        self.log('train/loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True, sync_dist=True, batch_size=batch_size)
         self.log_dict(
-            {'train/loss': loss, 'train/mde': train_mde, 'train/mdise': train_mdise, 'train/1pa': train_1pa}, 
+            {'train/mde': train_mde, 'train/mdise': train_mdise, 'train/1pa': train_1pa}, 
+            prog_bar=False, 
+            logger=True, 
             on_step=True, 
             on_epoch=True, 
-            prog_bar=True, 
-            logger=True, 
-            batch_size=batch_size, 
             sync_dist=True, 
+            batch_size=batch_size, 
         )
         
         return loss
@@ -193,14 +194,15 @@ class StereoDepthLightningModule(pl.LightningModule):
         val_mde, val_mdise, val_1pa = val_mde/batch_size, val_mdise/batch_size, val_1pa/batch_size
         
         # Validation log dict
+        self.log('val/loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True, sync_dist=True, batch_size=batch_size)
         self.log_dict(
-            {'val/loss': loss, 'val/mde': val_mde, 'val/mdise': val_mdise, 'val/1pa': val_1pa, 'val/fps': fps}, 
-            on_step=False, 
-            on_epoch=True, 
-            prog_bar=True, 
+            {'val/mde': val_mde, 'val/mdise': val_mdise, 'val/1pa': val_1pa, 'val/fps': fps}, 
+            prog_bar=False, 
             logger=True, 
-            batch_size=batch_size, 
+            on_step=True, 
+            on_epoch=True, 
             sync_dist=True, 
+            batch_size=batch_size, 
         )
         
         return loss
@@ -226,8 +228,8 @@ class StereoDepthLightningModule(pl.LightningModule):
             f.write(f'Epoch: {epoch} | time for validation: {time_per_val_str}\n')
             log_msg = 'Validation'
             for key, value in val_metrics.items():
-                if key.startswith('val/'):
-                    _key = key.split('/')[1]
+                if key.startswith('val/') and key.endswith('_epoch'):
+                    _key = key.split('/')[1].split('_')[0]
                     log_msg += f' | {_key}: {value.item():.3f}'
             log_msg += '\n'
             f.write(log_msg)
@@ -266,14 +268,15 @@ class StereoDepthLightningModule(pl.LightningModule):
             test_mde, test_mdise, test_1pa = test_mde/batch_size, test_mdise/batch_size, test_1pa/batch_size
             
             # Test log dict
+            self.log('test/loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True, sync_dist=True, batch_size=batch_size)
             self.log_dict(
-                {'test/loss': loss, 'test/mde': test_mde, 'test/mdise': test_mdise, 'test/1pa': test_1pa, 'test/fps': fps}, 
-                on_step=False, 
-                on_epoch=True, 
-                prog_bar=True, 
+                {'test/mde': test_mde, 'test/mdise': test_mdise, 'test/1pa': test_1pa, 'test/fps': fps}, 
+                prog_bar=False, 
                 logger=True, 
-                batch_size=batch_size, 
+                on_step=True, 
+                on_epoch=True, 
                 sync_dist=True, 
+                batch_size=batch_size, 
             )
             
             return loss
@@ -296,8 +299,8 @@ class StereoDepthLightningModule(pl.LightningModule):
             f.write(f'Time for test: {time_per_test_str}\n')
             log_msg = 'Test'
             for key, value in test_metrics.items():
-                if key.startswith('test/'):
-                    _key = key.split('/')[1]
+                if key.startswith('test/') and key.endswith('_epoch'):
+                    _key = key.split('/')[1].split('_')[0]
                     log_msg += f' | {_key}: {value.item():.3f}'
             log_msg += '\n'
             f.write(log_msg)
