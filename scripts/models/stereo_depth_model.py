@@ -1,3 +1,4 @@
+import os
 import time
 from einops import rearrange
 
@@ -7,6 +8,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 import lightning as pl
+from pytorch_lightning.utilities import rank_zero_only, rank_zero_info
 
 # from .concentration import ConcentrationNet
 from .rose import RoSE
@@ -32,6 +34,21 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         self.dataset = dataset
         
+    @rank_zero_only
+    def on_train_start(self):
+        if self.trainer.is_global_zero:
+            rank_zero_info('Master node: Saving model as model.txt ...')
+            self.save_model_info_if_master()
+            
+    @rank_zero_only
+    def save_model_info_if_master(self):
+        model_info = str(self)
+        total_params = sum(p.numel() for p in self.parameters())
+        model_info_f = os.path.join(self.trainer.log_dir, 'model.txt')
+        with open(model_info_f, 'w') as f:
+            f.write(model_info)
+            f.write(f'\n\nTotal parameters: {total_params}\n')
+            
     def forward(self, stereo_event, stereo_image):
         rose_img = {}
         ei_frame = {}
@@ -47,20 +64,29 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         return pred_disparity_pyramid
     
+    '''
+    DataLoader settngs
+    '''
     def train_dataloader(self):
         train_dataset = self.dataset.get_train_dataset()
         train_loader = DataLoader(dataset=train_dataset, **self.cfg.dataloader.train.params)
         return train_loader
-        
+    
     def val_dataloader(self):
         valid_dataset = self.dataset.get_valid_dataset()
         valid_loader = DataLoader(dataset=valid_dataset, **self.cfg.dataloader.validation.params)
         return valid_loader
-        
+    
     def test_dataloader(self):
         test_dataset = self.dataset.get_test_dataset()
         test_loader = DataLoader(dataset=test_dataset, **self.cfg.dataloader.test.params)
         return test_loader
+    
+    '''
+    Train, validaion and test process settings
+    '''
+    def on_train_epoch_start(self):
+        self.train_start_time = time.time()
         
     def training_step(self, batch):
         stereo_event = batch['event'] if 'event' in batch else None     # ['left', 'right'], [N, C, H, W]
@@ -102,6 +128,41 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         return loss
     
+    def on_train_epoch_end(self):
+        super().on_train_epoch_end()
+        time_per_epoch = time.time() - self.train_start_time
+        
+        # Formatting time for logging
+        hours, rem = divmod(time_per_epoch, 3600)
+        minutes, seconds = divmod(rem, 60)
+        time_per_epoch_str = f'{int(hours):02}:{int(minutes):02}:{int(seconds):02}'
+        
+        # Calculate ETA
+        remaining_epochs = self.trainer.max_epochs - (self.current_epoch + 1)
+        eta_seconds = time_per_epoch * remaining_epochs
+        eta_hours, eta_rem = divmod(eta_seconds, 3600)
+        eta_minutes, eta_seconds = divmod(eta_rem, 60)
+        eta_str = f'{int(eta_hours):02}:{int(eta_minutes):02}:{int(eta_seconds):02}'
+        
+        train_metrics = self.trainer.logged_metrics
+        epoch = self.current_epoch
+        log_dir = self.trainer.log_dir
+        train_log_f = os.path.join(log_dir, f'train_log.txt')
+        
+        # Save as .txt file
+        with open(train_log_f, 'a') as f:
+            f.write(f'Epoch: {epoch} | time per epoch: {time_per_epoch_str} | eta: {eta_str}\n')
+            log_msg = 'Train'
+            for key, value in train_metrics.items():
+                if key.startswith('train/') and key.endswith('_epoch'):
+                    _key = key.split('/')[1].split('_')[0]
+                    log_msg += f' | {_key}: {value.item():.3f}'
+            log_msg += '\n'
+            f.write(log_msg)
+            
+    def on_validation_epoch_start(self):
+        self.val_start_time = time.time()
+        
     def validation_step(self, batch):
         stereo_event = batch['event'] if 'event' in batch else None     # ['left', 'right'], [N, C, H, W]
         stereo_image = batch['image'] if 'image' in batch else None     # ['left', 'right'], [N, C, H, W]
@@ -133,7 +194,7 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         # Validation log dict
         self.log_dict(
-            {'val/loss': loss, 'val/fps': fps, 'val/mde': val_mde, 'val/mdise': val_mdise, 'val/1pa': val_1pa}, 
+            {'val/loss': loss, 'val/mde': val_mde, 'val/mdise': val_mdise, 'val/1pa': val_1pa, 'val/fps': fps}, 
             on_step=False, 
             on_epoch=True, 
             prog_bar=True, 
@@ -144,6 +205,36 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         return loss
     
+    def on_validation_epoch_end(self):
+        if self.trainer.sanity_checking:
+            return
+        super().on_validation_epoch_end()
+        time_per_val = time.time() - self.val_start_time
+        
+        # Formatting time for logging
+        hours, rem = divmod(time_per_val, 3600)
+        minutes, seconds = divmod(rem, 60)
+        time_per_val_str = f'{int(hours):02}:{int(minutes):02}:{int(seconds):02}'
+        
+        val_metrics = self.trainer.logged_metrics
+        epoch = self.current_epoch
+        log_dir = self.trainer.log_dir
+        val_log_f = os.path.join(log_dir, f'val_log.txt')
+        
+        # Save as .txt file
+        with open(val_log_f, 'a') as f:
+            f.write(f'Epoch: {epoch} | time for validation: {time_per_val_str}\n')
+            log_msg = 'Validation'
+            for key, value in val_metrics.items():
+                if key.startswith('val/'):
+                    _key = key.split('/')[1]
+                    log_msg += f' | {_key}: {value.item():.3f}'
+            log_msg += '\n'
+            f.write(log_msg)
+            
+    def on_test_epoch_start(self):
+        self.test_start_time = time.time()
+        
     def test_step(self, batch):
         stereo_event = batch['event'] if 'event' in batch else None     # ['left', 'right'], [N, C, H, W]
         stereo_image = batch['image'] if 'image' in batch else None     # ['left', 'right'], [N, C, H, W]
@@ -176,7 +267,7 @@ class StereoDepthLightningModule(pl.LightningModule):
             
             # Test log dict
             self.log_dict(
-                {'test/loss': loss, 'test/fps': fps, 'test/mde': test_mde, 'test/mdise': test_mdise, 'test/1pa': test_1pa}, 
+                {'test/loss': loss, 'test/mde': test_mde, 'test/mdise': test_mdise, 'test/1pa': test_1pa, 'test/fps': fps}, 
                 on_step=False, 
                 on_epoch=True, 
                 prog_bar=True, 
@@ -187,6 +278,33 @@ class StereoDepthLightningModule(pl.LightningModule):
             
             return loss
         
+    def on_test_epoch_end(self):
+        super().on_test_epoch_end()
+        time_per_test = time.time() - self.test_start_time
+        
+        # Formatting time for logging
+        hours, rem = divmod(time_per_test, 3600)
+        minutes, seconds = divmod(rem, 60)
+        time_per_test_str = f'{int(hours):02}:{int(minutes):02}:{int(seconds):02}'
+        
+        test_metrics = self.trainer.logged_metrics
+        log_dir = self.trainer.log_dir
+        test_log_f = os.path.join(log_dir, f'test_log.txt')
+        
+        # Save as .txt file
+        with open(test_log_f, 'a') as f:
+            f.write(f'Time for test: {time_per_test_str}\n')
+            log_msg = 'Test'
+            for key, value in test_metrics.items():
+                if key.startswith('test/'):
+                    _key = key.split('/')[1]
+                    log_msg += f' | {_key}: {value.item():.3f}'
+            log_msg += '\n'
+            f.write(log_msg)
+            
+    '''
+    Hyper-parameteres settings
+    '''
     def configure_optimizers(self):
         params_group = self._get_params_group(self.optimizer.params.lr)
         optimizer = getattr(torch.optim, self.optimizer.name)(params_group, **self.optimizer.params)
@@ -203,7 +321,7 @@ class StereoDepthLightningModule(pl.LightningModule):
     def _cal_loss(self, pred_disparity_pyramid, gt_disparity):
         pyramid_weight = [1 / 3, 2 / 3, 1.0, 1.0, 1.0]
         criterion = nn.SmoothL1Loss(reduction='none')
-
+        
         loss = 0.0
         mask = gt_disparity > 0
         for idx in range(len(pred_disparity_pyramid)):
@@ -216,10 +334,10 @@ class StereoDepthLightningModule(pl.LightningModule):
                                           mode='bilinear', align_corners=False) * (
                                     gt_disparity.size(-1) / pred_disp.size(-1))
                 pred_disp = pred_disp.squeeze(1)
-
+                
             cur_loss = criterion(pred_disp[mask], gt_disparity[mask])
             loss += weight * cur_loss
-
+            
         return loss
     
     def _get_params_group(self, learning_rate):

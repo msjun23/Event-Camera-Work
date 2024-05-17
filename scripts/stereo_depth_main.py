@@ -136,4 +136,4 @@ if __name__=='__main__':
         save_cfg_to_txt(cfg, args.save_dir)
     
     train(args, cfg)
-    print('# Save dir: ', args.save_dir, '\n')
+    print('\n', '# Save dir: ', args.save_dir, '\n')
