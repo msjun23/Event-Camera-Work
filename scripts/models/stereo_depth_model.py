@@ -34,6 +34,8 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         self.dataset = dataset
         
+        self.best_val_loss = float('inf')
+        
     @rank_zero_only
     def on_train_start(self):
         if self.trainer.is_global_zero:
@@ -161,6 +163,10 @@ class StereoDepthLightningModule(pl.LightningModule):
             log_msg += '\n'
             f.write(log_msg)
             
+        # Save the last checkpoint
+        last_ckpt_path = os.path.join(self.trainer.checkpoint_callback.dirpath, f'{epoch}.ckpt')
+        self.trainer.save_checkpoint(last_ckpt_path)
+        
     def on_validation_epoch_start(self):
         self.val_start_time = time.time()
         
@@ -233,6 +239,13 @@ class StereoDepthLightningModule(pl.LightningModule):
                     log_msg += f' | {_key}: {value.item():.3f}'
             log_msg += '\n'
             f.write(log_msg)
+            
+        # Save the best checkpoint based on validation loss
+        val_loss = self.trainer.callback_metrics.get('val/loss')
+        if val_loss is not None and val_loss < self.best_val_loss:
+            self.best_val_loss = val_loss
+            best_ckpt_path = os.path.join(self.trainer.checkpoint_callback.dirpath, 'best.ckpt')
+            self.trainer.save_checkpoint(best_ckpt_path)
             
     def on_test_epoch_start(self):
         self.test_start_time = time.time()
