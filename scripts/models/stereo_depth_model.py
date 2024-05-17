@@ -62,7 +62,7 @@ class StereoDepthLightningModule(pl.LightningModule):
         test_loader = DataLoader(dataset=test_dataset, **self.cfg.dataloader.test.params)
         return test_loader
         
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch):
         stereo_event = batch['event'] if 'event' in batch else None     # ['left', 'right'], [N, C, H, W]
         stereo_image = batch['image'] if 'image' in batch else None     # ['left', 'right'], [N, C, H, W]
         disparity_gt = batch['disparity_gt'] if 'disparity_gt' in batch else None   # [N, H, W]
@@ -102,7 +102,7 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         return loss
     
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch):
         stereo_event = batch['event'] if 'event' in batch else None     # ['left', 'right'], [N, C, H, W]
         stereo_image = batch['image'] if 'image' in batch else None     # ['left', 'right'], [N, C, H, W]
         disparity_gt = batch['disparity_gt'] if 'disparity_gt' in batch else None   # [N, H, W]
@@ -116,7 +116,6 @@ class StereoDepthLightningModule(pl.LightningModule):
         fps = 1 / ((time.time() - start_t) / batch_size)
         
         # Calculate loss
-        loss_disp = None
         loss_disp = self._cal_loss(pred_disparity_pyramid, disparity_gt)
         loss = loss_disp.mean()
         
@@ -145,7 +144,7 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         return loss
     
-    def test_step(self, batch, batch_idx):
+    def test_step(self, batch):
         stereo_event = batch['event'] if 'event' in batch else None     # ['left', 'right'], [N, C, H, W]
         stereo_image = batch['image'] if 'image' in batch else None     # ['left', 'right'], [N, C, H, W]
         disparity_gt = batch['disparity_gt'] if 'disparity_gt' in batch else None   # [N, H, W]
@@ -160,7 +159,6 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         if disparity_gt is not None:
             # Calculate loss
-            loss_disp = None
             loss_disp = self._cal_loss(pred_disparity_pyramid, disparity_gt)
             loss = loss_disp.mean()
             
