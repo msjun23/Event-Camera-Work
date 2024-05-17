@@ -15,7 +15,6 @@ from pytorch_lightning.utilities import rank_zero_only, rank_zero_info
 # from .concentration import ConcentrationNet
 from .rose import RoSE
 from .stereo_matching import StereoMatchingNetwork
-from utils.metrics import *
 from utils import metrics
 
 import warnings
