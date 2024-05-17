@@ -1,5 +1,7 @@
 import os
 import time
+import numpy as np
+import matplotlib.pyplot as plt
 from einops import rearrange
 
 import torch
@@ -28,13 +30,14 @@ class StereoDepthLightningModule(pl.LightningModule):
         self.rose = RoSE(**config.event_processor.params)
         self.stereo_matching_net = StereoMatchingNetwork(**config.disparity_estimator.params)
         self.max_disp = config.disparity_estimator.params.max_disp
+        self.best_val_loss = float('inf')
         
         self.optimizer = config.optimizer
         self.scheduler = config.scheduler
         
         self.dataset = dataset
         
-        self.best_val_loss = float('inf')
+        self.show = config.show
         
     @rank_zero_only
     def on_train_start(self):
@@ -64,7 +67,7 @@ class StereoDepthLightningModule(pl.LightningModule):
             ei_frame['right']
         )
         
-        return pred_disparity_pyramid
+        return rose_img, pred_disparity_pyramid
     
     '''
     DataLoader settngs
@@ -99,7 +102,7 @@ class StereoDepthLightningModule(pl.LightningModule):
         batch_size = len(file_index)
         
         # Forward pass
-        pred_disparity_pyramid = self.forward(stereo_event, stereo_image)   # List: [[N, H, W], ...]
+        rose_img, pred_disparity_pyramid = self.forward(stereo_event, stereo_image)   # List: [[N, H, W], ...]
         
         # Calculate loss
         loss_disp = self._cal_loss(pred_disparity_pyramid, disparity_gt)
@@ -129,6 +132,12 @@ class StereoDepthLightningModule(pl.LightningModule):
             batch_size=batch_size, 
         )
         
+        # Show the results
+        if self.show.train:
+            frames = [rose_img['left'][0], rose_img['right'][0], stereo_image['left'][0], stereo_image['right'][0], pred[0], gt[0]]
+            names  = ['left_event', 'right_event', 'left_image', 'right_image', 'pred', 'gt']
+            self._show_figs('train', frames, names)
+            
         return loss
     
     def on_train_epoch_end(self):
@@ -180,7 +189,7 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         # Forward pass
         start_t = time.time()
-        pred_disparity_pyramid = self.forward(stereo_event, stereo_image)   # List: [[N, H, W], ...]
+        rose_img, pred_disparity_pyramid = self.forward(stereo_event, stereo_image)   # List: [[N, H, W], ...]
         fps = 1 / ((time.time() - start_t) / batch_size)
         
         # Calculate loss
@@ -211,6 +220,12 @@ class StereoDepthLightningModule(pl.LightningModule):
             batch_size=batch_size, 
         )
         
+        # Show the results
+        if self.show.validation:
+            frames = [rose_img['left'][0], rose_img['right'][0], stereo_image['left'][0], stereo_image['right'][0], pred[0], gt[0]]
+            names  = ['left_event', 'right_event', 'left_image', 'right_image', 'pred', 'gt']
+            self._show_figs('validation', frames, names)
+            
         return loss
     
     def on_validation_epoch_end(self):
@@ -260,7 +275,7 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         # Forward pass
         start_t = time.time()
-        pred_disparity_pyramid = self.forward(stereo_event, stereo_image)   # List: [[N, H, W], ...]
+        rose_img, pred_disparity_pyramid = self.forward(stereo_event, stereo_image)   # List: [[N, H, W], ...]
         fps = 1 / ((time.time() - start_t) / batch_size)
         
         if disparity_gt is not None:
@@ -292,6 +307,12 @@ class StereoDepthLightningModule(pl.LightningModule):
                 batch_size=batch_size, 
             )
             
+            # Show the results
+            if self.show.test:
+                frames = [rose_img['left'][0], rose_img['right'][0], stereo_image['left'][0], stereo_image['right'][0], pred[0], gt[0]]
+                names  = ['left_event', 'right_event', 'left_image', 'right_image', 'pred', 'gt']
+                self._show_figs('test', frames, names)
+                
             return loss
         
     def on_test_epoch_end(self):
@@ -386,3 +407,43 @@ class StereoDepthLightningModule(pl.LightningModule):
         ]
         
         return params_group
+    
+    def _show_figs(self, exp, frames: list, names: list):
+        def _to_numpy(frame):
+            if frame is None:
+                return np.zeros((256, 256, 3), dtype=np.uint8)  # Assuming 256x256 for example
+            if frame.ndim == 3:  # C*H*W
+                frame = frame.detach().cpu().numpy().transpose(1, 2, 0)  # Convert C*H*W to H*W*C
+            elif frame.ndim == 2:  # H*W
+                frame = frame.detach().cpu().numpy()
+            return frame
+        
+        # Filter out None frames and their corresponding names
+        frames_names = [(_to_numpy(frame), name) for frame, name in zip(frames, names) if frame is not None]
+        if not frames_names:
+            return
+        
+        frames, names = zip(*frames_names)
+        num_rows = len(frames) // 2
+        fig, axes = plt.subplots(nrows=num_rows, ncols=2, figsize=(10, 5 * num_rows))
+        
+        for i in range(num_rows):
+            ax_left, ax_right = axes[i] if num_rows > 1 else axes
+            
+            left_frame = frames[2 * i]
+            right_frame = frames[2 * i + 1]
+            left_name = names[2 * i]
+            right_name = names[2 * i + 1]
+            
+            ax_left.imshow(left_frame)
+            ax_left.set_title(left_name)
+            ax_left.axis('off')
+            
+            ax_right.imshow(right_frame)
+            ax_right.set_title(right_name)
+            ax_right.axis('off')
+            
+        plt.tight_layout()
+        save_file = os.path.join(self.trainer.log_dir, f'{exp}_comparison.png')
+        plt.savefig(save_file)
+        plt.close(fig)
