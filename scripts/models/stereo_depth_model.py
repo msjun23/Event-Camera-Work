@@ -42,16 +42,14 @@ class StereoDepthLightningModule(pl.LightningModule):
         self.metrics = config.metric
         
     def on_train_start(self):
-        if self.trainer.is_global_zero:     # Master proc. only
-            rank_zero_info('Master node: Saving model as model.txt ...')
-            model_info = str(self)
-            total_params = sum(p.numel() for p in self.parameters())
-            log_dir = self.trainer.log_dir
-            model_info_f = os.path.join(log_dir, 'model.txt')
-            with open(model_info_f, 'w') as f:
-                f.write(model_info)
-                f.write(f'\n\nTotal parameters: {total_params}\n')
-                
+        model_info = str(self)
+        total_params = sum(p.numel() for p in self.parameters())
+        log_dir = self.trainer.log_dir
+        model_info_f = os.path.join(log_dir, 'model.txt')
+        with open(model_info_f, 'w') as f:
+            f.write(model_info)
+            f.write(f'\n\nTotal parameters: {total_params}\n')
+            
     def forward(self, stereo_event, stereo_image):
         rose_img = {}
         ei_frame = {}
