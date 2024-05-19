@@ -156,8 +156,8 @@ class StereoDepthLightningModule(pl.LightningModule):
         log_dir = self.trainer.log_dir
         train_log_f = os.path.join(log_dir, f'train_log.txt')
         
+        # Save as .txt file
         if self.trainer.is_global_zero:     # Master proc. only
-            # Save as .txt file
             with open(train_log_f, 'a') as f:
                 f.write(f'Epoch: {epoch} | time per epoch: {time_per_epoch_str} | eta: {eta_str}\n')
                 log_msg = 'Train'
@@ -167,11 +167,11 @@ class StereoDepthLightningModule(pl.LightningModule):
                         log_msg += f' | {_key}: {value.item():.3f}'
                 log_msg += '\n'
                 f.write(log_msg)
-                    
-            # Save the last checkpoint
-            last_ckpt_path = os.path.join(self.trainer.checkpoint_callback.dirpath, f'{epoch}.ckpt')
-            self.trainer.save_checkpoint(last_ckpt_path)
-            
+                
+        # Save the last checkpoint
+        last_ckpt_path = os.path.join(self.trainer.checkpoint_callback.dirpath, f'{epoch}.ckpt')
+        self.trainer.save_checkpoint(last_ckpt_path)
+        
     def on_validation_epoch_start(self):
         self.val_start_time = time.time()
         
@@ -239,8 +239,8 @@ class StereoDepthLightningModule(pl.LightningModule):
         log_dir = self.trainer.log_dir
         val_log_f = os.path.join(log_dir, f'val_log.txt')
         
+        # Save as .txt file
         if self.trainer.is_global_zero:     # Master proc. only
-            # Save as .txt file
             with open(val_log_f, 'a') as f:
                 f.write(f'Epoch: {epoch} | time for validation: {time_per_val_str}\n')
                 log_msg = 'Validation'
@@ -251,13 +251,13 @@ class StereoDepthLightningModule(pl.LightningModule):
                 log_msg += '\n'
                 f.write(log_msg)
                 
-            # Save the best checkpoint based on validation loss
-            val_loss = self.trainer.callback_metrics.get('val/loss')
-            if val_loss is not None and val_loss < self.best_val_loss:
-                self.best_val_loss = val_loss
-                best_ckpt_path = os.path.join(self.trainer.checkpoint_callback.dirpath, 'best.ckpt')
-                self.trainer.save_checkpoint(best_ckpt_path)
-                
+        # Save the best checkpoint based on validation loss
+        val_loss = self.trainer.callback_metrics.get('val/loss')
+        if val_loss is not None and val_loss < self.best_val_loss:
+            self.best_val_loss = val_loss
+            best_ckpt_path = os.path.join(self.trainer.checkpoint_callback.dirpath, 'best.ckpt')
+            self.trainer.save_checkpoint(best_ckpt_path)
+            
     def on_test_epoch_start(self):
         self.test_start_time = time.time()
         
@@ -323,8 +323,8 @@ class StereoDepthLightningModule(pl.LightningModule):
         log_dir = self.trainer.log_dir
         test_log_f = os.path.join(log_dir, f'test_log.txt')
         
+        # Save as .txt file
         if self.trainer.is_global_zero:     # Master proc. only
-            # Save as .txt file
             with open(test_log_f, 'a') as f:
                 f.write(f'Time for test: {time_per_test_str}\n')
                 log_msg = 'Test'
