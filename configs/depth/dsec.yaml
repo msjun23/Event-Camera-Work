@@ -30,7 +30,7 @@ dataset:
     delta_t_ms: 50
     # minimal event accumulation time = delta_t_ms / num_bins [ms]
     num_bins: 10
-    # original size: [260, 346]
+    # original size: [480, 640]
     height: 480
     width: 640
     crop_height: 432
