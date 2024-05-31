@@ -1,0 +1,102 @@
+# GPU precision: ['highest', 'high', 'medium'], for more details
+# https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
+gpu_precision: medium
+# See Docs for full flags and descriptions
+# https://pytorch-lightning.readthedocs.io/en/stable/common/trainer.html#trainer-class-api
+trainer:
+  params:
+    max_epochs: 200
+    accelerator: gpu
+    strategy: auto              # single GPU: auto / multi GPUs: ddp
+    devices: 0,                 # single GPU:0, / multi GPUs: 0,1,2,...
+    precision: 32-true       # 32-true (32) for default, bf16-mixed/true for mixed precision
+    accumulate_grad_batches: 1  # Gradient accumulation every n batches
+    gradient_clip_val: null
+    log_every_n_steps: 10
+    check_val_every_n_epoch: 1
+    limit_train_batches: 1.0    # train on full dataset, can be used to toggle quick run
+    # DSEC doesn't support validation set originally
+    limit_val_batches: 0.0      # validate on full dataset, can be used to toggle quick run, 0.0 means no validation
+    enable_model_summary: True  # Model summary before training process
+dataset:
+  dir: /root/data/
+  # name: [MVSEC, DSEC]
+  name: DSEC
+  params:
+    # modality: [event, image, EI]
+    modality: EI
+    # representation: [voxel, on_off, raw]
+    representation: on_off
+    delta_t_ms: 50
+    # minimal event accumulation time = delta_t_ms / num_bins [ms]
+    num_bins: 10
+    # original size: [260, 346]
+    height: 480
+    width: 640
+    crop_height: 432
+    crop_width: 576
+    pad_height: 480
+    pad_width: 648
+model:
+  name: StereoDepthLightningModule
+  event_processor:
+    params:
+      in_channels: 2
+      base_channels: 8
+      kernel_size: 3
+      padding: 1
+      stride: 1
+  disparity_estimator:
+    params:
+      in_channels: 4
+      max_disp: 192
+      refine_channels: 4
+  optimizer:
+    name: Adam
+    params:
+      lr: 0.0005
+      weight_decay: 0.0001
+  scheduler:
+    name: CosineAnnealingWarmupRestarts
+    params:
+      cycle_mult: 1.0
+      first_cycle_steps: 100
+      gamma: 1.0
+      lr_ratio: 0.0001
+      warmup_steps: 10
+  dataloader:
+    train:
+      params:
+        batch_size: 4
+        shuffle: True
+        drop_last: False
+        num_workers: 8
+    validation:
+      params:
+        batch_size: 1
+        shuffle: False
+        drop_last: False
+        num_workers: 8
+    test:
+      params:
+        batch_size: 1
+        shuffle: False
+        drop_last: False
+        num_workers: 8
+  show:
+    train: True
+    validation: True
+    test: True
+  metric:
+    mean_average_error:
+      name: mae
+    n_pixel_error:
+      name: 1pe
+      params:
+        n: 1
+    n_pixel_error:
+      name: 2pe
+      params:
+        n: 2
+    root_mean_square_error:
+      name: rmse

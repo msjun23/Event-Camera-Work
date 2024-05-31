@@ -36,3 +36,25 @@ def n_pixel_accuracy(pred, gt, n=1):
     error = torch.abs(pred - gt)
     error_mask = (error <= n).to(torch.float)
     return error_mask.mean() * 100  # report in [%]
+
+def mean_average_error(pred, gt):
+    # This is same to mean_disparity_error
+    # pred, gt, mask: (H, W)
+    assert pred.shape == gt.shape
+    
+    error = torch.abs(pred - gt)
+    return error.mean()             # report in [pix]
+
+def n_pixel_error(pred, gt, n=1):
+    # pred, gt, mask: (H, W)
+    assert pred.shape == gt.shape
+    
+    error = torch.abs(pred - gt)
+    error_mask = (error > n).to(torch.float)
+    return error_mask.mean()
+    
+def root_mean_square_error(pred, gt):
+    # pred, gt, mask: (H, W)
+    assert pred.shape == gt.shape
+    error = ((pred - gt)**2).mean().sqrt()
+    return error
