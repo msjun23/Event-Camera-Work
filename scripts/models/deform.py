@@ -88,6 +88,7 @@ class DeformConv2d(nn.Module):
                 x = x.to(torch.float32)
                 offset = offset.to(torch.float32)
                 mask = mask.to(torch.float32)
+                self.deform_conv = self.deform_conv.to(torch.float32)
                 bf16_flag = True
             out = self.deform_conv(x, offset, mask)
 
@@ -96,11 +97,12 @@ class DeformConv2d(nn.Module):
             if x.dtype == torch.bfloat16:
                 x = x.to(torch.float32)
                 offset = offset.to(torch.float32)
+                self.deform_conv = self.deform_conv.to(torch.float32)
                 bf16_flag = True
             out = self.deform_conv(x, offset)
         
         if bf16_flag:
-            out.to(torch.bfloat16)
+            out = out.to(torch.bfloat16)
 
         return out
 
