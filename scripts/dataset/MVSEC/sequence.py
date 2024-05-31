@@ -14,7 +14,7 @@ class Sequence(Dataset):
     def __init__(self, seq_dir: str, mode: str='train', 
                  modality: str='event', representation: str='voxel', 
                  delta_t_ms: int=50, num_bins: int=15, 
-                 height = 260, width = 346, 
+                 height=260, width=346, 
                  edit_height=260, edit_width=346, cut_off_index: tuple=None):
         assert Path(seq_dir).is_dir()
         assert mode in ['train', 'validation', 'test']
