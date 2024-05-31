@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from spikingjelly.activation_based import functional
 
 import lightning as pl
 from pytorch_lightning.utilities import rank_zero_only, rank_zero_info
@@ -51,11 +52,14 @@ class StereoDepthLightningModule(pl.LightningModule):
             f.write(f'\n\nTotal parameters: {total_params}\n')
             
     def forward(self, stereo_event, stereo_image):
+        _stereo_event = {}
         rose_img = {}
         ei_frame = {}
         for loc in ['left', 'right']:
-            # event_stack[loc] = rearrange(event_stack[loc], 'b c h w t s -> b (c s t) h w')
-            rose_img[loc] = self.rose(stereo_event[loc])
+            _stereo_event[loc] = stereo_event[loc].clone()
+            _stereo_event[loc] = rearrange(_stereo_event[loc], 'n t c h w -> t n c h w')
+            functional.reset_net(self.rose)
+            rose_img[loc] = self.rose(_stereo_event[loc])[-1]
             ei_frame[loc] = torch.cat([rose_img[loc], stereo_image[loc]], dim=1)
             
         pred_disparity_pyramid = self.stereo_matching_net(
@@ -307,8 +311,16 @@ class StereoDepthLightningModule(pl.LightningModule):
                 frames = [rose_img['left'][0], rose_img['right'][0], stereo_image['left'][0], stereo_image['right'][0], pred[0], gt[0]]
                 names  = ['left_event', 'right_event', 'left_image', 'right_image', 'pred', 'gt']
                 self._show_figs('test', frames, names)
-                
             return loss
+        else:       # No disparity gt
+            pred = pred_disparity_pyramid[-1].detach()
+            gt = torch.zeros_like(pred)
+            # Show the results
+            if self.show.test:
+                frames = [rose_img['left'][0], rose_img['right'][0], stereo_image['left'][0], stereo_image['right'][0], pred[0], gt[0]]
+                names  = ['left_event', 'right_event', 'left_image', 'right_image', 'pred', 'gt']
+                self._show_figs('test', frames, names)
+            return None
         
     def on_test_epoch_end(self):
         super().on_test_epoch_end()
@@ -406,6 +418,8 @@ class StereoDepthLightningModule(pl.LightningModule):
     
     def _show_figs(self, exp, frames: list, names: list):
         def _to_numpy(frame):
+            if frame.dtype == torch.bfloat16:
+                frame = frame.to(torch.float32)
             if frame is None:
                 return np.zeros((256, 256, 3), dtype=np.uint8)  # Assuming 256x256 for example
             if frame.ndim == 3:  # C*H*W
