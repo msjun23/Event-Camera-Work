@@ -62,43 +62,51 @@ class VoxelGrid(EventRepresentation):
                     else:
                         voxel_grid[mask] = voxel_grid[mask] - mean
 
+        voxel_grid = voxel_grid.unsqueeze(dim=1)        # [T,C=1,H,W]
         return voxel_grid
 
 
 class OnOffFrame(EventRepresentation):
-    def __init__(self, height: int, width: int):
-        self.on_off_frame = torch.zeros((2, height, width), dtype=torch.float, requires_grad=False)
+    def __init__(self, channels: int, height: int, width: int):
+        self.on_off_frame = torch.zeros((channels, 2, height, width), dtype=torch.float, requires_grad=False)
         
     def convert(self, x: torch.Tensor, y: torch.Tensor, pol: torch.Tensor, time: torch.Tensor):
-        # NOTE: shape of (2, Height, Width) and contained positive integers, 
+        # NOTE: shape of (Timesteps, 2, Height, Width) and contained positive integers, 
         # corresponding to the number of spikes of each polarity that showed up 
         # at each position of the scene during the time window
         #
         # U. Ranc¸on, J. Cuadrado-Anibarro, B. R. Cottereau, and T. Masquelier,
         # “Stereospike: Depth learning with a spiking neural network,” 
-        # arXiv preprint arXiv:2109.13751, 2021.
+        # IEEE Access 10 (2022): 127428-127439.
         
         assert x.shape == y.shape == pol.shape == time.shape
         assert x.ndim == 1
         
-        C, H, W = self.on_off_frame.shape
+        C, _, H, W = self.on_off_frame.shape
         with torch.no_grad():
             self.on_off_frame = self.on_off_frame.to(pol.device)
             on_off_frame = self.on_off_frame.clone()
             
+            t_norm = time
+            t_norm = (C - 1) * (t_norm-t_norm[0]) / (t_norm[-1]-t_norm[0])
             x0 = x.int()
             y0 = y.int()
+            t0 = t_norm.int()
+            if torch.sum(pol.unique()).item() == 0:     # if pol.unique() is [-1, 1]
+                pol = (pol+1)/2       # [0, 1]
+                
             for xlim in [x0, x0+1]:
                 for ylim in [y0, y0+1]:
                     mask = (xlim < W) & (xlim >= 0) & (ylim < H) & (ylim >= 0)
                     
-                    index = H * W * pol.long() + \
+                    index = 2 * H * W * t0.long() + \
+                            H * W * pol.long() + \
                             W * ylim.long() + \
                             xlim.long()
                     spike_value = torch.ones_like(mask, dtype=torch.float)
                     on_off_frame.put_(index[mask], spike_value[mask], accumulate=True)
                     
-        return on_off_frame
+        return on_off_frame     # [T,C=2,H,W]
     
     
 class RawEvent(EventRepresentation):
@@ -123,12 +131,14 @@ class RawEvent(EventRepresentation):
             time /= self.dt
             time  = time.int()
             time[time==time[-1]] = time[-1] - 1
-            value = 2*pol-1
+            if torch.sum(pol.unique()).item() != 0:     # if pol.unique() is [0, 1]
+                pol = 2*pol-1       # [-1, 1]
             
             mask = (pix_x < W) & (pix_x >= 0) & (pix_y < H) & (pix_y >= 0) & (time < C) & (time >= 0)
             
             index = H * W * time.long() + \
                     W * pix_y.long() + \
                     pix_x.long()
-            raw_stream.put_(index[mask], value[mask], accumulate=True)
+            raw_stream.put_(index[mask], pol[mask], accumulate=True)
+            raw_stream = raw_stream.unsqueeze(dim=1)        # [T,C=1,H,W]
         return raw_stream

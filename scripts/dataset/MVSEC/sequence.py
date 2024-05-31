@@ -68,7 +68,7 @@ class Sequence(Dataset):
         if self.representation == 'voxel':
             self.representation_method = VoxelGrid(self.channel, self.height, self.width, normalize=True)
         elif self.representation == 'on_off':
-            self.representation_method = OnOffFrame(self.height, self.width)
+            self.representation_method = OnOffFrame(self.channel, self.height, self.width)
         elif self.representation == 'raw':
             self.representation_method = RawEvent(self.channel, self.height, self.width)
             

@@ -19,8 +19,10 @@ class RandomCrop:
         
     def __call__(self, sample):
         if 'event' in sample.keys():
-            ori_height, ori_width = sample['event']['left'].shape[1:]
+            # T, C, H, W
+            ori_height, ori_width = sample['event']['left'].shape[2:]
         elif 'image' in sample.keys():
+            # C, H, W
             ori_height, ori_width = sample['image']['left'].shape[1:]
         else:
             raise NotImplementedError
@@ -40,8 +42,8 @@ class RandomCrop:
         if 'event' in sample.keys():
             # Crop event data
             for loc in ['left', 'right']:
-                # T, H, W
-                sample['event'][loc] = sample['event'][loc][:, start_y:end_y, start_x:end_x]
+                # T, C, H, W
+                sample['event'][loc] = sample['event'][loc][:,:, start_y:end_y, start_x:end_x]
         ## Image data
         if 'image' in sample.keys():
             # Crop iamge data            
@@ -65,8 +67,8 @@ class RandomVerticalFlip:
         if np.random.random() < 0.5:
             if 'event' in sample.keys():
                 for loc in ['left', 'right']:
-                    # T, H, W
-                    sample['event'][loc] = torch.flip(sample['event'][loc], dims=(1,))
+                    # T, C, H, W
+                    sample['event'][loc] = torch.flip(sample['event'][loc], dims=(2,))
             if 'image' in sample.keys():
                 for loc in ['left', 'right']:
                     # C, H, W
@@ -87,11 +89,11 @@ class RandomHorizontalFlip:
         if np.random.random() < 0.5:
             if 'event' in sample.keys():
                 for loc in ['left', 'right']:
-                    # timestep, H, W
-                    sample['event'][loc] = torch.flip(sample['event'][loc], dims=(2,))
+                    # T, C, H, W
+                    sample['event'][loc] = torch.flip(sample['event'][loc], dims=(3,))
             if 'image' in sample.keys():
                 for loc in ['left', 'right']:
-                    # timestep, H, W
+                    # C, H, W
                     sample['image'][loc] = torch.flip(sample['image'][loc], dims=(2,))
             if 'disparity_gt' in sample.keys():
                 # H, W
@@ -107,8 +109,10 @@ class Padding:
         
     def __call__(self, sample):
         if 'event' in sample.keys():
-            ori_height, ori_width = sample['event']['left'].shape[1:]
+            # T, C, H, W
+            ori_height, ori_width = sample['event']['left'].shape[2:]
         elif 'image' in sample.keys():
+            # C, H, W
             ori_height, ori_width = sample['image']['left'].shape[1:]
         else:
             raise NotImplementedError
@@ -119,9 +123,9 @@ class Padding:
         
         if 'event' in sample.keys():
             for loc in ['left', 'right']:
-                # T, H, W
+                # T, C, H, W
                 sample['event'][loc] = np.lib.pad(sample['event'][loc], 
-                                                ((0,0), (top_pad,0), (0,right_pad)), 
+                                                ((0,0), (0,0), (top_pad,0), (0,right_pad)), 
                                                 mode='constant', 
                                                 constant_values=0)
         if 'image' in sample.keys():
