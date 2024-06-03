@@ -51,7 +51,7 @@ def n_pixel_error(pred, gt, n=1):
     
     error = torch.abs(pred - gt)
     error_mask = (error > n).to(torch.float)
-    return error_mask.mean()
+    return error_mask.mean() * 100
     
 def root_mean_square_error(pred, gt):
     # pred, gt, mask: (H, W)
