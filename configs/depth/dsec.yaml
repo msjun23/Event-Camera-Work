@@ -90,11 +90,11 @@ model:
   metric:
     mean_average_error:
       name: mae
-    n_pixel_error:
+    n_pixel_error_1:
       name: 1pe
       params:
         n: 1
-    n_pixel_error:
+    n_pixel_error_2:
       name: 2pe
       params:
         n: 2
