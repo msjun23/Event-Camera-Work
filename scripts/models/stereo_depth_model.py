@@ -216,6 +216,8 @@ class StereoDepthLightningModule(pl.LightningModule):
         for p, g, m in zip(pred, gt, mask):
             p, g = p[m], g[m]
             for _m, detail in self.metrics.items():
+                if _m.startswith('n_pixel_error'):
+                    _m = '_'.join(_m.split('_')[:-1])
                 metrics_dict[detail.name] += getattr(metrics, _m)(p, g).item() if 'params' not in detail else getattr(metrics, _m)(p, g, **detail.params).item()
         metrics_dict = {k: v/batch_size for k, v in metrics_dict.items()}
         
@@ -303,6 +305,8 @@ class StereoDepthLightningModule(pl.LightningModule):
             for p, g, m in zip(pred, gt, mask):
                 p, g = p[m], g[m]
                 for _m, detail in self.metrics.items():
+                    if _m.startswith('n_pixel_error'):
+                        _m = '_'.join(_m.split('_')[:-1])
                     metrics_dict[detail.name] += getattr(metrics, _m)(p, g).item() if 'params' not in detail else getattr(metrics, _m)(p, g, **detail.params).item()
             metrics_dict = {k: v/batch_size for k, v in metrics_dict.items()}
             
