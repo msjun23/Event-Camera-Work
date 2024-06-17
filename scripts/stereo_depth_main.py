@@ -26,7 +26,7 @@ def load_config(file_path):
 def save_config(cfg, save_dir):
     with open(f'{save_dir}/config.yaml', 'w') as file:
         yaml.dump(OmegaConf.to_container(cfg, resolve=True), file)
-            
+        
 def set_random_seed(seed):
     # Python
     random.seed(seed)
