@@ -1,11 +1,11 @@
 import os
-import sys
+import yaml
 import shutil
 import random
 import argparse
 import numpy as np
 from pathlib import Path
-from yacs.config import CfgNode as CN
+from omegaconf import OmegaConf
 from datetime import datetime, timezone, timedelta
 
 import torch
@@ -18,17 +18,14 @@ import models
 import dataset
 
 
-def get_cfg(cfg_path):
-    cfg = CN(new_allowed=True)
-    cfg.merge_from_file(cfg_path)
-    cfg.freeze()
+def load_config(file_path):
+    with open(file_path, 'r') as file:
+        config = yaml.safe_load(file)
+    return OmegaConf.create(config)
 
-    return cfg
-
-def save_cfg_to_txt(cfg, save_dir):
-    with open(f"{save_dir}/config.yaml", "w") as f:
-        for key, value in cfg.items():
-            f.write(f"{key}: {value}\n")
+def save_config(cfg, save_dir):
+    with open(f'{save_dir}/config.yaml', 'w') as file:
+        yaml.dump(OmegaConf.to_container(cfg, resolve=True), file)
             
 def set_random_seed(seed):
     # Python
@@ -45,7 +42,7 @@ def set_random_seed(seed):
     # Numpy
     np.random.seed(seed)
 
-def train(args: argparse, cfg: CN):
+def train(args: argparse, cfg):
     torch.set_float32_matmul_precision(cfg.gpu_precision)
     
     # Prepare dataset
@@ -76,7 +73,7 @@ if __name__=='__main__':
     args = parser.parse_args()
     
     # Set config
-    cfg = get_cfg(Path(args.cfg_path))
+    cfg = load_config(Path(args.cfg_path))
     assert cfg.dataset.name in ['MVSEC', 'DSEC']
     args.data_dir = cfg.dataset.dir + cfg.dataset.name
     assert Path(args.data_dir).is_dir()
@@ -84,7 +81,7 @@ if __name__=='__main__':
     
     # Set seed
     # seed = np.random.randint(0, 2**32 - 1)
-    seed = 41
+    if cfg.seed is None: seed = 41
     set_random_seed(seed)
     
     # Update save_dir
@@ -100,10 +97,8 @@ if __name__=='__main__':
     # Save config
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
-    cfg.defrost()
     cfg.seed = seed
-    cfg.freeze()
-    save_cfg_to_txt(cfg, args.save_dir)
+    save_config(cfg, args.save_dir)
     
     train(args, cfg)
     print('\n', '# Save dir: ', args.save_dir, '\n')
