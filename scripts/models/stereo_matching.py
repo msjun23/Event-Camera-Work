@@ -78,11 +78,22 @@ class StereoMatchingNetwork(nn.Module):
         return disparity_pyramid
 
     def forward(self, left_img, right_img):
-        left_feature = self.feature_extractor(left_img)
-        right_feature = self.feature_extractor(right_img)
-        cost_volume = self.cost_volume_constructor(left_feature, right_feature)
-        aggregation = self.aggregation(cost_volume)
-        disparity_pyramid = self.disparity_estimation(aggregation)
+        ''' E.g.,
+        left_feature torch.Size([16, 128, 86, 112]) torch.Size([16, 128, 43, 56]) torch.Size([16, 128, 22, 28]) 3
+        cost_volume torch.Size([16, 40, 86, 112]) torch.Size([16, 20, 43, 56]) torch.Size([16, 10, 22, 28]) 3
+        aggregation torch.Size([16, 40, 86, 112]) torch.Size([16, 20, 43, 56]) torch.Size([16, 10, 22, 28]) 3
+        disparity_pyramid torch.Size([16, 22, 28]) torch.Size([16, 43, 56]) torch.Size([16, 86, 112]) 3
+        disparity_pyramid torch.Size([16, 22, 28]) torch.Size([16, 43, 56]) torch.Size([16, 86, 112]) torch.Size([16, 128, 168]) torch.Size([16, 256, 336]) 5
+        '''
+        # feature size order in list: larger -> smaller
+        left_feature = self.feature_extractor(left_img)                             # left_img, right_img: [B, C, H, W], tensor
+        right_feature = self.feature_extractor(right_img)                           # ([B, C_f, H/n1, W/n1], [B, C_f, H/n2, W/n2], ...), list of tensors
+        cost_volume = self.cost_volume_constructor(left_feature, right_feature)     # ([B, C_v, H/n1, W/n1], [B, C_v, H/n2, W/n2], ...), list of tensors
+        aggregation = self.aggregation(cost_volume)                                 # ([B, C_v, H/n1, W/n1], [B, C_v, H/n2, W/n2], ...), list of tensors
+        # disparity_pyramid becomes reverse order: smaller -> larger
+        # and has no channel dimension; disparity map is 1-C image
+        disparity_pyramid = self.disparity_estimation(aggregation)                  # ([B, H/n_{-1}, W/n_{-1}], [B, H/n_{-2}, W/n_{-2}], ...), list of tensors
+        # Refine disparity_maps to original size, disparity_pyramid[-1] is a final output (disparity map in original size)
         disparity_pyramid += self.disparity_refinement(left_img, right_img, disparity_pyramid[-1])
 
         return disparity_pyramid
