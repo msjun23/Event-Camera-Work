@@ -9,3 +9,8 @@ pretrained/*
 exp/*
 
 lightning_logs/
+
+# ignore kernel extensions for S4 module
+build/
+dist/
+*.egg-info/
