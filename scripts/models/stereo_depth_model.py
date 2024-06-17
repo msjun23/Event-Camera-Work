@@ -59,17 +59,7 @@ class StereoDepthLightningModule(pl.LightningModule):
             _stereo_event[loc] = stereo_event[loc].clone()
             _stereo_event[loc] = rearrange(_stereo_event[loc], 'n t c h w -> t n c h w')
             functional.reset_net(self.rose)
-            rose_img[loc] = self.rose(_stereo_event[loc])[-1]
-            
-            ''' 2D Gaussian Splatting from Spiked Image of Event: GauSSIEvent
-            rose_img
-            -> 2D Gaussian Splatting
-                Optimize using intensity image
-            -> splatted_rose_img
-            
-            splatted_rose_img[loc] = self.gs(rose_img[loc])     # will be concated with intensity image
-            '''
-            
+            rose_img[loc] = self.rose(_stereo_event[loc])[-1]   # [N, C, H, W]
             ei_frame[loc] = torch.cat([rose_img[loc], stereo_image[loc]], dim=1)
             
         pred_disparity_pyramid = self.stereo_matching_net(
