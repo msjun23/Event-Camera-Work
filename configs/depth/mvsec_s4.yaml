@@ -1,0 +1,139 @@
+# GPU precision: ['highest', 'high', 'medium'], for more details
+# https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
+gpu_precision: medium
+# See Docs for full flags and descriptions
+# https://pytorch-lightning.readthedocs.io/en/stable/common/trainer.html#trainer-class-api
+trainer:
+  params:
+    max_epochs: 200
+    accelerator: gpu
+    strategy: auto              # single GPU: auto / multi GPUs: ddp
+    devices: 0,                 # single GPU:0, / multi GPUs: 0,1,2,...
+    precision: 32-true       # 32-true (32) for default, bf16-mixed/true for mixed precision
+    accumulate_grad_batches: 1  # Gradient accumulation every n batches
+    gradient_clip_val: null
+    log_every_n_steps: 10
+    check_val_every_n_epoch: 1
+    limit_train_batches: 1.0    # train on full dataset, can be used to toggle quick run
+    limit_val_batches: 1.0      # validate on full dataset, can be used to toggle quick run, 0.0 means no validation
+    enable_model_summary: True  # Model summary before training process
+dataset:
+  dir: /root/data/
+  # name: [MVSEC, DSEC]
+  name: MVSEC
+  params:
+    # split: ['1', '2', '3']
+    split: '1'
+    # modality: [event, image, EI]
+    modality: EI
+    # representation: [voxel, on_off, raw]
+    representation: on_off
+    delta_t_ms: 50
+    # minimal event accumulation time = delta_t_ms / num_bins [ms]
+    num_bins: 50
+    # original size: [260, 346]
+    height: 260
+    width: 346
+    crop_height: 256
+    crop_width: 336
+    pad_height: 272
+    pad_width: 352
+model:
+  name: StereoDepthLightningModule
+  seq_encoder:
+    params:
+      in_channels: 2
+      base_channels: 64
+      d_model: 128
+  event_processor:
+    params:
+      # S4Block
+      d_model: 128
+      bottleneck: null
+      activation: gelu
+      gate: null
+      gate_act: id
+      mult_act: null
+      final_act: glu
+      postact: null
+      initializer: null
+      weight_norm: False
+      dropout: 0.1
+      tie_dropout: True
+      transposed: False
+      # Layer, e.g., FFTConv
+      l_max: null
+      channels: 1
+      swap_channels: False
+      bidirectional: True
+      drop_kernel: 0.0
+      mode: nplr
+      kernel: null
+      # Kernel, e.g., SSMKernelDPLR, SSMKernelDiag
+      d_state: 64
+      deterministic: False
+      lr:
+        dt: 0.001
+        A: 0.001
+        B: 0.001
+      wd: 0.0
+      verbose: True
+      dt_min: 0.001
+      dt_max: 0.1
+      dt_transform: softplus
+      rank: 1
+      n_ssm: 2
+      measure: null
+      init: legs
+  disparity_estimator:
+    params:
+      ev_in_channels: 2
+      img_in_channels: 1
+      max_disp: 120
+      refine_channels: 1
+  optimizer:
+    name: Adam
+    params:
+      lr: 0.0005
+      weight_decay: 0.0001
+  scheduler:
+    name: CosineAnnealingWarmupRestarts
+    params:
+      cycle_mult: 1.0
+      first_cycle_steps: 100
+      gamma: 1.0
+      lr_ratio: 0.0001
+      warmup_steps: 10
+  dataloader:
+    train:
+      params:
+        batch_size: 1
+        shuffle: True
+        drop_last: False
+        num_workers: 8
+    validation:
+      params:
+        batch_size: 1
+        shuffle: False
+        drop_last: False
+        num_workers: 8
+    test:
+      params:
+        batch_size: 1
+        shuffle: False
+        drop_last: False
+        num_workers: 8
+  show:
+    train: True
+    validation: True
+    test: True
+  metric:
+    mean_depth_error:
+      name: mde
+    mean_disparity_error:
+      name: mdise
+    n_pixel_accuracy:
+      name: 1pa
+      params:
+        n: 1
+seed: null
