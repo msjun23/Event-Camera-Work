@@ -14,7 +14,7 @@ import lightning as pl
 from pytorch_lightning.utilities import rank_zero_only, rank_zero_info
 
 # from .concentration import ConcentrationNet
-from .rose import RoSE
+# from .rose import RoSE
 from .stereo_matching import StereoMatchingNetwork
 from utils import metrics
 
@@ -28,8 +28,8 @@ class StereoDepthLightningModule(pl.LightningModule):
         super(StereoDepthLightningModule, self).__init__()
         self.cfg = config
         
-        self.rose = RoSE(**config.event_processor.params)
-        self.stereo_matching_net = StereoMatchingNetwork(**config.disparity_estimator.params)
+        # self.rose = RoSE(**config.event_processor.params)
+        self.stereo_matching_net = StereoMatchingNetwork(**config.disparity_estimator.params, **config.event_processor.params)
         self.max_disp = config.disparity_estimator.params.max_disp
         self.best_val_loss = float('inf')
         
@@ -52,22 +52,31 @@ class StereoDepthLightningModule(pl.LightningModule):
             f.write(f'\n\nTotal parameters: {total_params}\n')
             
     def forward(self, stereo_event, stereo_image):
-        _stereo_event = {}
-        rose_img = {}
-        ei_frame = {}
-        for loc in ['left', 'right']:
-            _stereo_event[loc] = stereo_event[loc].clone()
-            _stereo_event[loc] = rearrange(_stereo_event[loc], 'n t c h w -> t n c h w')
-            functional.reset_net(self.rose)
-            rose_img[loc] = self.rose(_stereo_event[loc])[-1]   # [N, C, H, W]
-            ei_frame[loc] = torch.cat([rose_img[loc], stereo_image[loc]], dim=1)
+        # _stereo_event = {}
+        # rose_img = {}
+        # ei_frame = {}
+        # for loc in ['left', 'right']:
+        #     _stereo_event[loc] = stereo_event[loc].clone()
+        #     _stereo_event[loc] = rearrange(_stereo_event[loc], 'n t c h w -> t n c h w')
+        #     functional.reset_net(self.rose)
+        #     rose_img[loc] = self.rose(_stereo_event[loc])[-1]   # [N, C, H, W]
+        #     ei_frame[loc] = torch.cat([rose_img[loc], stereo_image[loc]], dim=1)
             
+        # pred_disparity_pyramid = self.stereo_matching_net(
+        #     ei_frame['left'],
+        #     ei_frame['right']
+        # )
+        
+        # return rose_img, pred_disparity_pyramid
+    
         pred_disparity_pyramid = self.stereo_matching_net(
-            ei_frame['left'],
-            ei_frame['right']
+            stereo_event['left'], 
+            stereo_event['right'], 
+            stereo_image['left'], 
+            stereo_image['right']
         )
         
-        return rose_img, pred_disparity_pyramid
+        return {'left': stereo_event['left'].sum(dim=1).sum(dim=1), 'right': stereo_event['right'].sum(dim=1).sum(dim=1)}, pred_disparity_pyramid
     
     '''
     DataLoader settngs
