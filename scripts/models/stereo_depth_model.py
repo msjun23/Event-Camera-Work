@@ -15,7 +15,17 @@ from pytorch_lightning.utilities import rank_zero_only, rank_zero_info
 
 # from .concentration import ConcentrationNet
 # from .rose import RoSE
-from .stereo_matching import StereoMatchingNetwork
+# from .stereo_matching import StereoMatchingNetwork
+from .refinement import StereoDRNetRefinement
+
+from .sequence_encoder import SequenceEncoder
+from .s4 import S4Block
+
+from .ev_feature_extractor import EventFeatureExtractor
+from .feature_extractor import FeatureExtractor
+from .cost import CostVolumePyramid
+from .aggregation import AdaptiveAggregation
+from .estimation import DisparityEstimationPyramid
 from utils import metrics
 
 import warnings
@@ -27,10 +37,11 @@ class StereoDepthLightningModule(pl.LightningModule):
     def __init__(self, config, dataset=None):
         super(StereoDepthLightningModule, self).__init__()
         self.cfg = config
+        self.model_init(**config.network)
         
         # self.rose = RoSE(**config.event_processor.params)
-        self.stereo_matching_net = StereoMatchingNetwork(**config.disparity_estimator.params, **config.event_processor.params)
-        self.max_disp = config.disparity_estimator.params.max_disp
+        # self.stereo_matching_net = StereoMatchingNetwork(**config.disparity_estimator.params, **config.event_processor.params)
+        # self.max_disp = config.disparity_estimator.params.max_disp
         self.best_val_loss = float('inf')
         
         self.optimizer = config.optimizer
@@ -41,6 +52,80 @@ class StereoDepthLightningModule(pl.LightningModule):
         self.show = config.show
         
         self.metrics = config.metric
+        
+    def model_init(self, max_disp,
+                   ev_in_channels=2,
+                   img_in_channels=3,
+                   num_downsample=2,
+                   no_mdconv=False,
+                   feature_similarity='correlation',
+                   num_scales=3,
+                   num_fusions=6,
+                   deformable_groups=2,
+                   mdconv_dilation=2,
+                   no_intermediate_supervision=False,
+                   num_stage_blocks=1,
+                   num_deform_blocks=3,
+                   refine_channels=None, 
+                   **kwargs, ):
+        refine_channels = img_in_channels if refine_channels is None else refine_channels
+        self.num_downsample = num_downsample
+        self.num_scales = num_scales
+        self.max_disp = max_disp
+
+        # Feature extractor
+        self.ev_feature_extractor = EventFeatureExtractor(in_channels=ev_in_channels)
+        self.feature_extractor = FeatureExtractor(in_channels=img_in_channels)
+        max_disp = max_disp // 3
+
+        # Event sequence processor
+        self.seq_encoder = SequenceEncoder(**kwargs['seq_encoder'])
+        self.s4 = S4Block(**kwargs['event_processor'])
+
+        # Cost volume construction
+        self.cost_volume_constructor = CostVolumePyramid(max_disp, feature_similarity=feature_similarity)
+
+        # Cost aggregation
+        self.aggregation = AdaptiveAggregation(max_disp=max_disp,
+                                               num_scales=num_scales,
+                                               num_fusions=num_fusions,
+                                               num_stage_blocks=num_stage_blocks,
+                                               num_deform_blocks=num_deform_blocks,
+                                               no_mdconv=no_mdconv,
+                                               mdconv_dilation=mdconv_dilation,
+                                               deformable_groups=deformable_groups,
+                                               intermediate_supervision=not no_intermediate_supervision)
+
+        # Disparity estimation
+        self.disparity_estimation = DisparityEstimationPyramid(max_disp)
+
+        # Refinement
+        refine_module_list = nn.ModuleList()
+        for i in range(num_downsample):
+            refine_module_list.append(StereoDRNetRefinement(img_channels=refine_channels))
+
+        self.refinement = refine_module_list
+        
+    def disparity_refinement(self, left_img, right_img, disparity):
+        disparity_pyramid = []
+        for i in range(self.num_downsample):
+            scale_factor = 1. / pow(2, self.num_downsample - i - 1)
+
+            if scale_factor == 1.0:
+                curr_left_img = left_img
+                curr_right_img = right_img
+            else:
+                curr_left_img = F.interpolate(left_img,
+                                                scale_factor=scale_factor,
+                                                mode='bilinear', align_corners=False)
+                curr_right_img = F.interpolate(right_img,
+                                                scale_factor=scale_factor,
+                                                mode='bilinear', align_corners=False)
+            inputs = (disparity, curr_left_img, curr_right_img)
+            disparity = self.refinement[i](*inputs)
+            disparity_pyramid.append(disparity)  # [H/2, H]
+
+        return disparity_pyramid
         
     def on_train_start(self):
         model_info = str(self)
@@ -69,14 +154,63 @@ class StereoDepthLightningModule(pl.LightningModule):
         
         # return rose_img, pred_disparity_pyramid
     
-        pred_disparity_pyramid = self.stereo_matching_net(
-            stereo_event['left'], 
-            stereo_event['right'], 
-            stereo_image['left'], 
-            stereo_image['right']
-        )
+    ##########################################################################################
+    
+        # pred_disparity_pyramid = self.stereo_matching_net(
+        #     stereo_event['left'], 
+        #     stereo_event['right'], 
+        #     stereo_image['left'], 
+        #     stereo_image['right']
+        # )
         
-        return {'left': stereo_event['left'].sum(dim=1).sum(dim=1), 'right': stereo_event['right'].sum(dim=1).sum(dim=1)}, pred_disparity_pyramid
+        # return {'left': stereo_event['left'].sum(dim=1).sum(dim=1), 'right': stereo_event['right'].sum(dim=1).sum(dim=1)}, pred_disparity_pyramid
+        
+    ##########################################################################################
+        
+        left_ev, right_ev = stereo_event['left'], stereo_event['right']
+        left_img, right_img = stereo_image['left'], stereo_image['right']
+        
+        left_ev = rearrange(left_ev, 'b t c h w -> t b c h w')
+        right_ev = rearrange(right_ev, 'b t c h w -> t b c h w')
+
+        # Extract event and image features
+        left_ev_features = self.ev_feature_extractor(left_ev)
+        right_ev_features = self.ev_feature_extractor(right_ev)
+        left_features = self.feature_extractor(left_img)
+        right_features = self.feature_extractor(right_img)
+
+        # Process each feature level
+        for f_idx, (left_ev_f, right_ev_f) in enumerate(zip(left_ev_features, right_ev_features)):
+            left_ev_seq = rearrange(self.seq_encoder(left_ev_f), 't b c -> b t c')
+            right_ev_seq = rearrange(self.seq_encoder(right_ev_f), 't b c -> b t c')
+
+            left_ev_seq, _ = self.s4(left_ev_seq)
+            right_ev_seq, _ = self.s4(right_ev_seq)
+
+            left_ev_t_score = F.softmax(left_ev_seq, dim=1)
+            right_ev_t_score = F.softmax(right_ev_seq, dim=1)
+
+            left_ev_t_score = rearrange(left_ev_t_score, 'b t c -> b t c 1 1')
+            right_ev_t_score = rearrange(right_ev_t_score, 'b t c -> b t c 1 1')
+
+            left_ev_f = rearrange(left_ev_f, 't b c h w -> b t c h w')
+            right_ev_f = rearrange(right_ev_f, 't b c h w -> b t c h w')
+
+            left_ev_f = torch.sum(left_ev_t_score * left_ev_f, dim=1)
+            right_ev_f = torch.sum(right_ev_t_score * right_ev_f, dim=1)
+
+            left_features[f_idx] = left_features[f_idx] + left_ev_f  # Avoid in-place operation
+            right_features[f_idx] = right_features[f_idx] + right_ev_f  # Avoid in-place operation
+
+        # Construct cost volume and aggregate
+        cost_volume = self.cost_volume_constructor(left_features, right_features)
+        aggregation = self.aggregation(cost_volume)
+
+        # Estimate disparity and refine
+        disparity_pyramid = self.disparity_estimation(aggregation)
+        disparity_pyramid += self.disparity_refinement(left_img, right_img, disparity_pyramid[-1])
+
+        return {'left': stereo_event['left'].sum(dim=1).sum(dim=1), 'right': stereo_event['right'].sum(dim=1).sum(dim=1)}, disparity_pyramid
     
     '''
     DataLoader settngs

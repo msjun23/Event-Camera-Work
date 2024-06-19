@@ -40,13 +40,18 @@ dataset:
     pad_width: 352
 model:
   name: StereoDepthLightningModule
-  seq_encoder:
-    params:
-      in_channels: 2
-      base_channels: 64
+  network:
+    # disparity_estimator:
+    #   params:
+    ev_in_channels: 2
+    img_in_channels: 1
+    max_disp: 120
+    refine_channels: 1
+    seq_encoder:
+      in_channels: 128
+      base_channels: 128
       d_model: 128
-  event_processor:
-    params:
+    event_processor:
       # S4Block
       d_model: 128
       bottleneck: null
@@ -85,12 +90,6 @@ model:
       n_ssm: 2
       measure: null
       init: legs
-  disparity_estimator:
-    params:
-      ev_in_channels: 2
-      img_in_channels: 1
-      max_disp: 120
-      refine_channels: 1
   optimizer:
     name: Adam
     params:
